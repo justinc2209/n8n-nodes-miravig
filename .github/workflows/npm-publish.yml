@@ -1,0 +1,59 @@
+name: Publish npm package
+
+# Publication de confiance (trusted publishing) npm pour n8n-nodes-miravig.
+# Adapté du workflow du monorepo (justinc2209/miravig, .github/workflows/
+# npm-publish.yml) pour ce dépôt autonome : plus de miravig-tests/build.js
+# (ce script et le moteur partagé qu'il resynchronise, extension-gardefou/
+# rules.js et consorts, n'existent pas ici) ni de working-directory
+# miravig-n8n (ce dépôt EST déjà la racine du package). `npm run build`
+# seul (rimraf dist && tsc) redevient l'étape de build correcte ici,
+# puisque nodes/Miravig/lib/*.js est la source de vérité statique de ce
+# dépôt, plus une copie à resynchroniser depuis ailleurs.
+#
+# Se déclenche sur `release: published` (le clic "Publish release" dans
+# l'UI GitHub, pas "Save draft"). Nécessite la configuration Trusted
+# Publishing correspondante côté npmjs.com sur le paquet n8n-nodes-miravig :
+# "GitHub Actions", dépôt justinc2209/n8n-nodes-miravig, nom de fichier de
+# workflow exact ".github/workflows/npm-publish.yml", job "publish".
+#
+# --provenance explicite malgré la publication de confiance : confirmé en
+# pratique (test du 25/08/2026 sur le monorepo, scan officiel
+# npx @n8n/scan-community-package) que l'automatisme documenté par npm ne
+# suffit pas à lui seul -- voir SESSION_LOG.md du dépôt monorepo pour le
+# détail complet de cette découverte.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      # OIDC pour la publication de confiance nécessite npm >= 11.5.1 --
+      # jamais garanti par la version bundlée avec l'image du runner.
+      - name: Mise à jour npm (>= 11.5.1 requis pour l'authentification OIDC)
+        run: npm install -g npm@latest
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm run build
+        run: npm run build
+
+      - name: npm test
+        run: npm test
+
+      - name: npm publish
+        run: npm publish --provenance

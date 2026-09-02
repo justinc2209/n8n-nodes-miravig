@@ -1,0 +1,48 @@
+{
+  "name": "n8n-nodes-miravig",
+  "version": "0.1.3",
+  "description": "Detects sensitive data before sending text to an LLM, and reverses masking afterwards -- checksum-verified glossary sync, never a silent correction. Prompt-quality checks (variables, placeholders, JSON wrapping, verbatim preservation) are a separate tool at n8n-checker.html, not part of this node.",
+  "keywords": [
+    "n8n-community-node-package",
+    "privacy",
+    "pii",
+    "prompt",
+    "llm",
+    "gdpr"
+  ],
+  "license": "MIT",
+  "homepage": "https://miravig.com/mode-emploi-n8n.html",
+  "author": {
+    "name": "Miravig"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justinc2209/n8n-nodes-miravig.git"
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "npm run clean && tsc",
+    "test": "node test/run.js && node test/glossary.test.js && node test/demasquer.test.js && node test/license.test.js && node test/license-hashed.test.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/MiravigApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Miravig/Miravig.node.js"
+    ]
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "n8n-workflow": "^2.16.0",
+    "rimraf": "^6.1.3",
+    "typescript": "^5.9.3"
+  }
+}
