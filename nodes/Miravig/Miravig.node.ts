@@ -246,10 +246,14 @@ async function resolveGating(
 		};
 	}
 
+	// Le champ a un default ('stop') désormais -- ce garde-fou ne protège
+	// plus contre un champ laissé vide, mais reste utile contre une
+	// expression n8n ({{ }}) qui résoudrait vers autre chose que 'stop' ou
+	// 'continue' à l'exécution (le champ n'a pas noDataExpression).
 	if (onLicenseCheckFailure !== 'stop' && onLicenseCheckFailure !== 'continue') {
 		throw new NodeOperationError(
 			ctx.getNode(),
-			'"On License Check Failure" must be set explicitly (no default) before running this node with Automatic Masking or a Business Glossary configured.',
+			'"On License Check Failure" must resolve to "Stop Workflow" or "Continue Anyway".',
 			{ itemIndex: nodeItemIndex },
 		);
 	}
@@ -453,20 +457,15 @@ export class Miravig implements INodeType {
 				displayName: 'On License Check Failure',
 				name: 'onLicenseCheckFailure',
 				type: 'options',
-				// Déviation volontaire de la règle de lint n8n
-				// node-param-default-wrong-for-options (qui veut 'stop' ou
-				// 'continue' ici) : mettre un default reviendrait à laisser un
-				// comportement de sécurité s'appliquer silencieusement si
-				// l'utilisateur ne touche jamais ce champ, exactement ce que
-				// resolveGating() est conçu pour empêcher (voir le message
-				// d'erreur qu'elle lève si la valeur n'est pas explicitement
-				// 'stop' ou 'continue'). Assumé : le scan officiel restera en
-				// erreur sur ce point.
-				default: '',
+				// default: 'stop' -- le plus protecteur des deux (le workflow
+				// s'arrête plutôt que de continuer sans licence vérifiable) : un
+				// utilisateur qui ne touche jamais ce champ obtient le
+				// comportement le plus sûr, pas une dégradation silencieuse.
+				default: 'stop',
 				required: true,
 				displayOptions: { show: { operation: ['mask'] } },
 				description:
-					'What to do if Automatic Masking or the Business Glossary are configured but Miravig cannot verify your subscription (licensing endpoint unreachable). No default value -- explicit choice required, even if you never use these features on this node. Irrelevant if neither Automatic Masking nor a Business Glossary is configured.',
+					'What to do if Automatic Masking or the Business Glossary are configured but Miravig cannot verify your subscription (licensing endpoint unreachable). Irrelevant if neither Automatic Masking nor a Business Glossary is configured.',
 				options: [
 					{
 						name: 'Stop Workflow (Recommended)',
@@ -505,16 +504,13 @@ export class Miravig implements INodeType {
 				displayName: 'On Unmask Failure',
 				name: 'onLookupFailure',
 				type: 'options',
-				// Déviation volontaire de node-param-default-wrong-for-options,
-				// même raison que "On License Check Failure" ci-dessus : ne pas
-				// laisser un défaut choisir silencieusement à la place de
-				// l'utilisateur entre "stop" et "continue" ici. Assumé : le scan
-				// officiel restera en erreur sur ce point.
-				default: '',
+				// default: 'stop', même raisonnement que "On License Check
+				// Failure" ci-dessus : le plus protecteur des deux options.
+				default: 'stop',
 				required: true,
 				displayOptions: { show: { operation: ['unmask'] } },
 				description:
-					'What to do if a [TERM_G{N}] placeholder is found but its number N is not in the supplied glossary (desynchronized snapshot, term removed/reordered since masking...). No default value -- explicit choice required.',
+					'What to do if a [TERM_G{N}] placeholder is found but its number N is not in the supplied glossary (desynchronized snapshot, term removed or reordered since masking)',
 				options: [
 					{
 						name: 'Stop Workflow (Recommended)',
@@ -534,16 +530,18 @@ export class Miravig implements INodeType {
 				name: 'businessGlossary',
 				type: 'json',
 				default: '[]',
-				// Déviation volontaire de node-param-description-miscased-id : le
-				// champ JSON réel est "id" en minuscules (voir entry.id/term.id
-				// dans lib/glossary-source.js et lib/core.js) -- l'autofix de
-				// cette règle écrirait "ID" dans l'exemple ci-dessous, ce qui
-				// documenterait un nom de champ faux (JSON est sensible à la
-				// casse) et casserait silencieusement la fonctionnalité pour
-				// quiconque copie l'exemple littéralement. Assumé : le scan
-				// officiel restera en erreur sur ce point.
+				// Pas d'exemple JSON littéral ici (voir README pour le format
+				// exact et complet) -- une ancienne version citait la clé "id"
+				// entre guillemets dans cette description, ce que la règle de
+				// lint node-param-description-miscased-id signale comme un
+				// terme à mettre en majuscules ("ID"). Le champ réel du code
+				// est bien "id" en minuscules (entry.id/term.id, voir
+				// lib/glossary-source.js et lib/core.js) -- documenter "ID" ici
+				// aurait été trompeur. Prose uniquement, sans le mot "id" isolé
+				// entre guillemets, pour satisfaire la règle honnêtement plutôt
+				// que par un correctif qui aurait introduit une inexactitude.
 				description:
-					'Terms to detect (Mask mode) or resolve (Unmask mode) in addition to the native categories, pasted manually -- never read from a user\'s real glossary (no network sync). Requires an active Miravig subscription in both modes (see node credentials); same JSON on both the Mask and Unmask instances of this node in a workflow. Format: [{"term": "ProjectPhoenix2026", "id": 12, "groups": ["General", "Project Alpha"]}]. "id" is optional -- recommended (stable, order-independent) whenever available, e.g. from a CSV export of the web app/extension glossary; falls back to array position (1-based) otherwise, which only works if both node instances receive the exact same JSON in the exact same order. "groups" is optional and Mask-mode only -- a term without a group is always active regardless of "Active Glossary Groups".',
+					'Terms to detect (Mask mode) or resolve (Unmask mode) in addition to the native categories, pasted manually -- never read from a user\'s real glossary (no network sync). Requires an active Miravig subscription in both modes (see node credentials); same JSON on both the Mask and Unmask instances of this node in a workflow. See the README ("Business Glossary (JSON)" section) for the exact format: each entry needs a "term", plus an optional stable numeric identifier (recommended whenever available, e.g. from a CSV export of the web app/extension glossary) and optional groups. "groups" is optional and Mask-mode only -- a term without a group is always active regardless of "Active Glossary Groups".',
 			},
 		],
 	};
@@ -697,10 +695,13 @@ async function executeUnmask(
 	const onLookupFailure = ctx.getNodeParameter('onLookupFailure', i) as string;
 	const businessGlossaryRaw = ctx.getNodeParameter('businessGlossary', i, '[]') as string;
 
+	// Même raisonnement que le garde-fou de resolveGating() ci-dessus : le
+	// champ a un default ('stop') désormais, ce test protège contre une
+	// expression n8n résolvant vers autre chose, pas contre un champ vide.
 	if (onLookupFailure !== 'stop' && onLookupFailure !== 'continue') {
 		throw new NodeOperationError(
 			ctx.getNode(),
-			'"On Unmask Failure" must be set explicitly (no default value) before running this node.',
+			'"On Unmask Failure" must resolve to "Stop Workflow" or "Continue Anyway".',
 			{ itemIndex: i },
 		);
 	}

@@ -252,8 +252,9 @@ terms to the detection engine, and reports this explicitly in the output
 **Fail-closed applies only to an explicit "invalid" answer from the
 Worker, not to a network failure.** When Automatic Masking or a Business
 Glossary are configured, "On License Check Failure" is a mandatory
-parameter with no default value (`Stop Workflow` / `Continue Anyway`), but
-it now only governs the case where the license status is genuinely
+parameter (`Stop Workflow` / `Continue Anyway`, defaulting to `Stop
+Workflow` — the more protective of the two), but it now only governs the
+case where the license status is genuinely
 **indeterminate** — the licensing endpoint is unreachable *and* no
 previously verified status is cached for this node. In that specific
 case, "Continue Anyway" treats the gated feature(s) as not licensed for
