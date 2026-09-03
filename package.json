@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-miravig",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Detects sensitive data before sending text to an LLM, and reverses masking afterwards -- checksum-verified glossary sync, never a silent correction. Prompt-quality checks (variables, placeholders, JSON wrapping, verbatim preservation) are a separate tool at n8n-checker.html, not part of this node.",
   "keywords": [
     "n8n-community-node-package",
