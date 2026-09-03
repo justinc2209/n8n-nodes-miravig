@@ -1,4 +1,4 @@
-import type { ICredentialType, INodeProperties } from 'n8n-workflow';
+import type { Icon, ICredentialType, INodeProperties } from 'n8n-workflow';
 
 // Réutilise le mécanisme de licence de l'extension/web app (license.js) --
 // PAS le système compte + apiKey de account.worker.js (accounts,
@@ -15,7 +15,10 @@ import type { ICredentialType, INodeProperties } from 'n8n-workflow';
 // s'appliquer (voir Miravig.node.ts).
 export class MiravigApi implements ICredentialType {
 	name = 'miravigApi';
-	displayName = 'Miravig License';
+	displayName = 'Miravig License API';
+	// Même icône que le node (nodes/Miravig/miravig.svg) -- un seul fichier
+	// source, jamais dupliqué, référencé en relatif depuis credentials/.
+	icon: Icon = 'file:../nodes/Miravig/miravig.svg';
 	documentationUrl = 'https://www.miravig.com/docs/n8n';
 	properties: INodeProperties[] = [
 		{

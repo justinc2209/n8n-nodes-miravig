@@ -54,11 +54,12 @@ function base64ToBytes(b64) {
   return new Uint8Array(Buffer.from(b64, 'base64'));
 }
 
+// Ce fichier ne tourne que côté Node (node n8n exécuté par le serveur n8n),
+// jamais dans un navigateur ni un Worker -- contrairement à l'original dont
+// ce code est porté (extension-gardefou/license.js), où la double voie
+// navigateur/Node a un vrai rôle. Un seul chemin ici, pas de détection
+// d'environnement à faire.
 function getSubtle() {
-  if (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.subtle) {
-    return globalThis.crypto.subtle;
-  }
-  // eslint-disable-next-line global-require
   return require('node:crypto').webcrypto.subtle;
 }
 

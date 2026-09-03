@@ -1,11 +1,15 @@
 import type {
+	ICredentialsDecrypted,
+	ICredentialTestFunctions,
 	IDataObject,
 	IExecuteFunctions,
+	IHttpRequestHelper,
+	INodeCredentialTestResult,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 // La logique métier reste en JS pur, testée indépendamment de n8n (voir
 // lib/core.js, lib/license-source.js et leurs suites de tests) — ce
@@ -320,7 +324,8 @@ export class Miravig implements INodeType {
 		description:
 			'Detects sensitive data before sending text to an LLM, and reverses masking afterwards -- same detection engine as the Miravig browser extension and web app. Prompt-quality checks (variables, unfilled placeholders, JSON-wrapping risk, verbatim-preservation risk) are not part of this node -- see the separate n8n-checker.html tool for those.',
 		defaults: { name: 'Miravig' },
-		inputs: ['main'],
+		usableAsTool: true,
+		inputs: [NodeConnectionTypes.Main],
 		// Une seule sortie par défaut (spec de cadrage du 12/08/2026) :
 		// la 2e sortie ("Flagged") n'apparaît que si l'utilisateur active
 		// explicitement "Route Flagged Items to a Second Output" en mode
@@ -336,23 +341,26 @@ export class Miravig implements INodeType {
 		// quand une seule sortie est résolue (le 2e nom est simplement
 		// inutilisé).
 		outputNames: ['Result', 'Flagged'],
-		credentials: [{ name: 'miravigApi', required: false }],
+		credentials: [{ name: 'miravigApi', required: false, testedBy: 'miravigApiTest' }],
 		properties: [
 			{
 				displayName: 'Operation',
 				name: 'operation',
 				type: 'options',
+				noDataExpression: true,
 				default: 'mask',
 				options: [
 					{
 						name: 'Mask',
 						value: 'mask',
 						description: 'Detect sensitive data and replace it with placeholders before sending text to an LLM',
+						action: 'Detect sensitive data and replace it with placeholders before sending text to an LLM',
 					},
 					{
 						name: 'Unmask',
 						value: 'unmask',
 						description: 'Restore original values from [TERM_G{N}] placeholders in an LLM response',
+						action: 'Restore original values from [TERM_G{N}] placeholders in an LLM response',
 					},
 				],
 			},
@@ -445,6 +453,15 @@ export class Miravig implements INodeType {
 				displayName: 'On License Check Failure',
 				name: 'onLicenseCheckFailure',
 				type: 'options',
+				// Déviation volontaire de la règle de lint n8n
+				// node-param-default-wrong-for-options (qui veut 'stop' ou
+				// 'continue' ici) : mettre un default reviendrait à laisser un
+				// comportement de sécurité s'appliquer silencieusement si
+				// l'utilisateur ne touche jamais ce champ, exactement ce que
+				// resolveGating() est conçu pour empêcher (voir le message
+				// d'erreur qu'elle lève si la valeur n'est pas explicitement
+				// 'stop' ou 'continue'). Assumé : le scan officiel restera en
+				// erreur sur ce point.
 				default: '',
 				required: true,
 				displayOptions: { show: { operation: ['mask'] } },
@@ -454,13 +471,13 @@ export class Miravig implements INodeType {
 					{
 						name: 'Stop Workflow (Recommended)',
 						value: 'stop',
-						description: 'Explicit error, the workflow stops -- never an unverified paid feature applied silently.',
+						description: 'Explicit error, the workflow stops -- never an unverified paid feature applied silently',
 					},
 					{
 						name: 'Continue Anyway -- At Your Own Risk',
 						value: 'continue',
 						description:
-							'The workflow continues; the paid feature(s) are treated as NOT licensed for this run (fail-closed, same behavior as the browser extension), with an explicit warning in the output.',
+							'The workflow continues; the paid feature(s) are treated as NOT licensed for this run (fail-closed, same behavior as the browser extension), with an explicit warning in the output',
 					},
 				],
 			},
@@ -482,12 +499,17 @@ export class Miravig implements INodeType {
 				default: true,
 				displayOptions: { show: { operation: ['unmask'] } },
 				description:
-					'Lets you disable unmasking via an n8n expression (e.g. based on a value from an earlier node) without a separate IF node. If disabled, the text passes through unchanged.',
+					'Whether to unmask the text. Lets you disable unmasking via an n8n expression (e.g. based on a value from an earlier node) without a separate IF node -- if disabled, the text passes through unchanged.',
 			},
 			{
 				displayName: 'On Unmask Failure',
 				name: 'onLookupFailure',
 				type: 'options',
+				// Déviation volontaire de node-param-default-wrong-for-options,
+				// même raison que "On License Check Failure" ci-dessus : ne pas
+				// laisser un défaut choisir silencieusement à la place de
+				// l'utilisateur entre "stop" et "continue" ici. Assumé : le scan
+				// officiel restera en erreur sur ce point.
 				default: '',
 				required: true,
 				displayOptions: { show: { operation: ['unmask'] } },
@@ -497,12 +519,12 @@ export class Miravig implements INodeType {
 					{
 						name: 'Stop Workflow (Recommended)',
 						value: 'stop',
-						description: 'Explicit error, the workflow stops -- never a partially-unmasked text going unnoticed.',
+						description: 'Explicit error, the workflow stops -- never a partially-unmasked text going unnoticed',
 					},
 					{
 						name: 'Continue Anyway -- At Your Own Risk',
 						value: 'continue',
-						description: 'The workflow continues; unresolved placeholders remain as-is in the output text.',
+						description: 'The workflow continues; unresolved placeholders remain as-is in the output text',
 					},
 				],
 			},
@@ -512,10 +534,80 @@ export class Miravig implements INodeType {
 				name: 'businessGlossary',
 				type: 'json',
 				default: '[]',
+				// Déviation volontaire de node-param-description-miscased-id : le
+				// champ JSON réel est "id" en minuscules (voir entry.id/term.id
+				// dans lib/glossary-source.js et lib/core.js) -- l'autofix de
+				// cette règle écrirait "ID" dans l'exemple ci-dessous, ce qui
+				// documenterait un nom de champ faux (JSON est sensible à la
+				// casse) et casserait silencieusement la fonctionnalité pour
+				// quiconque copie l'exemple littéralement. Assumé : le scan
+				// officiel restera en erreur sur ce point.
 				description:
 					'Terms to detect (Mask mode) or resolve (Unmask mode) in addition to the native categories, pasted manually -- never read from a user\'s real glossary (no network sync). Requires an active Miravig subscription in both modes (see node credentials); same JSON on both the Mask and Unmask instances of this node in a workflow. Format: [{"term": "ProjectPhoenix2026", "id": 12, "groups": ["General", "Project Alpha"]}]. "id" is optional -- recommended (stable, order-independent) whenever available, e.g. from a CSV export of the web app/extension glossary; falls back to array position (1-based) otherwise, which only works if both node instances receive the exact same JSON in the exact same order. "groups" is optional and Mask-mode only -- a term without a group is always active regardless of "Active Glossary Groups".',
 			},
 		],
+	};
+
+	// Appelé par le bouton "Test" de l'UI credentials n8n (voir
+	// credentials: [...] ci-dessus, testedBy: 'miravigApiTest'). La clé est
+	// optionnelle par conception (MiravigApi.credentials.ts) -- un champ
+	// laissé vide n'est donc jamais un échec, juste rappelé comme "usage
+	// gratuit" plutôt que testé contre le Worker. Réutilise volontairement
+	// le même endpoint/format que checkLicense() plus bas, sans dupliquer
+	// la logique de cache ni de repli sur un statut mis en cache -- un
+	// simple aller-retour réseau suffit pour ce bouton.
+	methods = {
+		credentialTest: {
+			async miravigApiTest(
+				this: ICredentialTestFunctions,
+				credential: ICredentialsDecrypted,
+			): Promise<INodeCredentialTestResult> {
+				const licenseKey = (credential.data as IDataObject | undefined)?.licenseKey as
+					| string
+					| undefined;
+				if (!licenseKey) {
+					return {
+						status: 'OK',
+						message:
+							'No license key set -- detection stays free and unlimited. Add a key here only to unlock automatic masking and the business glossary.',
+					};
+				}
+				try {
+					// this.helpers n'expose que `request` (déprécié) dans le type
+					// ICredentialTestFunctions de cette version de n8n-workflow --
+					// httpRequest existe bel et bien à l'exécution (IHttpRequestHelper
+					// existe précisément pour ce cas, voir n8n-workflow/interfaces.d.ts),
+					// le type est juste incomplet ici. Cast explicite plutôt qu'un
+					// `any` généralisé, et commenté pour ne pas laisser croire à un
+					// oubli si n8n-workflow corrige ce type dans une future version.
+					const helpers = this.helpers as unknown as IHttpRequestHelper['helpers'];
+					const response = (await helpers.httpRequest({
+						method: 'POST',
+						url: LICENSE_VALIDATE_URL,
+						body: { licenseKey },
+						json: true,
+						// Le Worker renvoie 400/403 avec un corps JSON exploitable
+						// pour une licence invalide -- jamais une exception, donc
+						// jamais interprété comme une panne réseau (même principe
+						// que ignoreHttpStatusErrors dans checkLicense()).
+						ignoreHttpStatusErrors: true,
+						timeout: 10000,
+					})) as IDataObject;
+					if (response && response.valid === true) {
+						return { status: 'OK', message: 'License key verified -- subscription active.' };
+					}
+					return {
+						status: 'Error',
+						message: 'This license key was not recognized as active by the Miravig licensing service.',
+					};
+				} catch (error) {
+					return {
+						status: 'Error',
+						message: `Could not reach the Miravig licensing service (${(error as Error).message}).`,
+					};
+				}
+			},
+		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
