@@ -1,10 +1,6 @@
 import type {
-	ICredentialsDecrypted,
-	ICredentialTestFunctions,
 	IDataObject,
 	IExecuteFunctions,
-	IHttpRequestHelper,
-	INodeCredentialTestResult,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
@@ -341,7 +337,11 @@ export class Miravig implements INodeType {
 		// quand une seule sortie est résolue (le 2e nom est simplement
 		// inutilisé).
 		outputNames: ['Result', 'Flagged'],
-		credentials: [{ name: 'miravigApi', required: false, testedBy: 'miravigApiTest' }],
+		// Le test du bouton "Test" de l'UI credentials est déclaratif
+		// (MiravigApi.credentials.ts, propriété `test`), pas `testedBy` ici --
+		// voir le commentaire sur `test` dans ce fichier pour pourquoi les
+		// deux mécanismes ne peuvent pas coexister.
+		credentials: [{ name: 'miravigApi', required: false }],
 		properties: [
 			{
 				displayName: 'Operation',
@@ -546,68 +546,6 @@ export class Miravig implements INodeType {
 					'Terms to detect (Mask mode) or resolve (Unmask mode) in addition to the native categories, pasted manually -- never read from a user\'s real glossary (no network sync). Requires an active Miravig subscription in both modes (see node credentials); same JSON on both the Mask and Unmask instances of this node in a workflow. Format: [{"term": "ProjectPhoenix2026", "id": 12, "groups": ["General", "Project Alpha"]}]. "id" is optional -- recommended (stable, order-independent) whenever available, e.g. from a CSV export of the web app/extension glossary; falls back to array position (1-based) otherwise, which only works if both node instances receive the exact same JSON in the exact same order. "groups" is optional and Mask-mode only -- a term without a group is always active regardless of "Active Glossary Groups".',
 			},
 		],
-	};
-
-	// Appelé par le bouton "Test" de l'UI credentials n8n (voir
-	// credentials: [...] ci-dessus, testedBy: 'miravigApiTest'). La clé est
-	// optionnelle par conception (MiravigApi.credentials.ts) -- un champ
-	// laissé vide n'est donc jamais un échec, juste rappelé comme "usage
-	// gratuit" plutôt que testé contre le Worker. Réutilise volontairement
-	// le même endpoint/format que checkLicense() plus bas, sans dupliquer
-	// la logique de cache ni de repli sur un statut mis en cache -- un
-	// simple aller-retour réseau suffit pour ce bouton.
-	methods = {
-		credentialTest: {
-			async miravigApiTest(
-				this: ICredentialTestFunctions,
-				credential: ICredentialsDecrypted,
-			): Promise<INodeCredentialTestResult> {
-				const licenseKey = (credential.data as IDataObject | undefined)?.licenseKey as
-					| string
-					| undefined;
-				if (!licenseKey) {
-					return {
-						status: 'OK',
-						message:
-							'No license key set -- detection stays free and unlimited. Add a key here only to unlock automatic masking and the business glossary.',
-					};
-				}
-				try {
-					// this.helpers n'expose que `request` (déprécié) dans le type
-					// ICredentialTestFunctions de cette version de n8n-workflow --
-					// httpRequest existe bel et bien à l'exécution (IHttpRequestHelper
-					// existe précisément pour ce cas, voir n8n-workflow/interfaces.d.ts),
-					// le type est juste incomplet ici. Cast explicite plutôt qu'un
-					// `any` généralisé, et commenté pour ne pas laisser croire à un
-					// oubli si n8n-workflow corrige ce type dans une future version.
-					const helpers = this.helpers as unknown as IHttpRequestHelper['helpers'];
-					const response = (await helpers.httpRequest({
-						method: 'POST',
-						url: LICENSE_VALIDATE_URL,
-						body: { licenseKey },
-						json: true,
-						// Le Worker renvoie 400/403 avec un corps JSON exploitable
-						// pour une licence invalide -- jamais une exception, donc
-						// jamais interprété comme une panne réseau (même principe
-						// que ignoreHttpStatusErrors dans checkLicense()).
-						ignoreHttpStatusErrors: true,
-						timeout: 10000,
-					})) as IDataObject;
-					if (response && response.valid === true) {
-						return { status: 'OK', message: 'License key verified -- subscription active.' };
-					}
-					return {
-						status: 'Error',
-						message: 'This license key was not recognized as active by the Miravig licensing service.',
-					};
-				} catch (error) {
-					return {
-						status: 'Error',
-						message: `Could not reach the Miravig licensing service (${(error as Error).message}).`,
-					};
-				}
-			},
-		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {

@@ -1,4 +1,4 @@
-import type { Icon, ICredentialType, INodeProperties } from 'n8n-workflow';
+import type { Icon, ICredentialTestRequest, ICredentialType, INodeProperties } from 'n8n-workflow';
 
 // Réutilise le mécanisme de licence de l'extension/web app (license.js) --
 // PAS le système compte + apiKey de account.worker.js (accounts,
@@ -31,4 +31,39 @@ export class MiravigApi implements ICredentialType {
 				'Optional. Your Miravig subscription license key (from your Lemon Squeezy purchase receipt) -- same key used in the browser extension and web app. Leave empty for free use: detection stays complete either way, but automatic masking and the business glossary require a valid key. Sent only to the Miravig licensing endpoint for validation.',
 		},
 	];
+
+	// Déclaratif plutôt que methods.credentialTest sur le node : n8n donne
+	// priorité absolue à cette propriété dès qu'elle existe --
+	// CredentialsTester.getCredentialTestFunction() (n8n-io/n8n,
+	// packages/cli/src/services/credentials-tester.service.ts) retourne dès
+	// que `type.test` est défini, sans même regarder `testedBy` sur le node
+	// (vérifié directement dans ce fichier, pas supposé). Les deux
+	// mécanismes ne peuvent donc pas coexister -- un seul gagne, jamais un
+	// filet de sécurité en plus de l'autre.
+	//
+	// /license/validate renvoie toujours 200 pour ce endpoint (jamais
+	// 400/403 sur une clé absente -- voir account.worker.js#handleValidate,
+	// corrigé le 03/09/2026 spécifiquement pour ce test) : clé vide ->
+	// { tier: 'free' } (pas de champ `valid` -- ni succès ni échec à
+	// signaler), clé invalide/expirée -> { valid: false, ... } (relayé par
+	// Lemon Squeezy), clé valide -> { valid: true, ... }. La règle
+	// ci-dessous ne signale une erreur QUE si `valid` vaut explicitement
+	// false ; { tier: 'free' } n'a pas ce champ donc ne la déclenche jamais.
+	test: ICredentialTestRequest = {
+		request: {
+			method: 'POST',
+			url: 'https://miravig-account.miravig-metrics.workers.dev/license/validate',
+			body: { licenseKey: '={{$credentials.licenseKey}}' },
+		},
+		rules: [
+			{
+				type: 'responseSuccessBody',
+				properties: {
+					key: 'valid',
+					value: false,
+					message: 'This license key was not recognized as active by the Miravig licensing service.',
+				},
+			},
+		],
+	};
 }
