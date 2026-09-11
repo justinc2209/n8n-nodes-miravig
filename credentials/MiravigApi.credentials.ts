@@ -19,7 +19,7 @@ export class MiravigApi implements ICredentialType {
 	// Même icône que le node (nodes/Miravig/miravig.svg) -- un seul fichier
 	// source, jamais dupliqué, référencé en relatif depuis credentials/.
 	icon: Icon = 'file:../nodes/Miravig/miravig.svg';
-	documentationUrl = 'https://www.miravig.com/docs/n8n';
+	documentationUrl = 'https://www.miravig.com/mode-emploi-n8n.html';
 	properties: INodeProperties[] = [
 		{
 			displayName: 'License Key',
