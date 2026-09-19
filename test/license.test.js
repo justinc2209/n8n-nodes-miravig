@@ -1,10 +1,10 @@
 'use strict';
 
-// Vérification ECDSA du garde-fou de licence (lib/license-source.js),
-// spec de cadrage du 12/08/2026 -- couple de clés de TEST généré ici,
-// aucun rapport avec la clé de production du Worker (jamais accessible
-// dans ce dépôt, correctement -- seule la clé PUBLIQUE de production est
-// embarquée dans license-source.js, voir son commentaire d'en-tête).
+// ECDSA verification of the license guard (lib/license-source.js),
+// 12/08/2026 scoping spec -- a TEST key pair is generated here, with no
+// relation to the Worker's production key (never accessible from this
+// repo, correctly so -- only the production PUBLIC key is embedded in
+// license-source.js, see its header comment).
 
 const crypto = require('crypto');
 const {
@@ -22,11 +22,11 @@ function assert(cond, label) {
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
 const testPublicJwk = publicKey.export({ format: 'jwk' });
 
-// Web Crypto (utilisé côté vérification, y compris dans le Worker et
-// l'extension) attend une signature "raw" (r || s), pas le DER produit par
-// défaut par crypto.sign() de Node -- dsaEncoding: 'ieee-p1363' aligne les
-// deux, sans quoi CHAQUE signature de test échouerait à la vérification,
-// pas seulement les cas volontairement invalides ci-dessous.
+// Web Crypto (used on the verification side, including in the Worker and
+// the extension) expects a "raw" signature (r || s), not the DER produced
+// by default by Node's crypto.sign() -- dsaEncoding: 'ieee-p1363' aligns
+// the two, without which EVERY test signature would fail verification,
+// not just the deliberately invalid cases below.
 function signRecord({ licenseKey, status, checkedAt }) {
 	const payload = Buffer.from(buildLicenseSignaturePayload({ licenseKey, status, checkedAt }));
 	const signature = crypto.sign('sha256', payload, { key: privateKey, dsaEncoding: 'ieee-p1363' });

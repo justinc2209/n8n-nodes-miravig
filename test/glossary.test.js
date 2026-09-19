@@ -1,12 +1,12 @@
 'use strict';
 
-// Groupes de termes dans le glossaire métier (spec du 11/08/2026, section 6
-// — node n8n, voir SESSION_LOG.md). Teste core.js#analyze() avec
-// config.glossary, pas seulement le module partagé glossary-source.js
-// directement (couvert par miravig-tests/glossary-groups.test.js) — ici on
-// vérifie l'intégration réelle : fusion avec les détections natives,
-// masquage par catégorie 'business-term', comportement à travers l'API
-// publique que Miravig.node.ts appelle.
+// Business glossary term groups (spec from 11/08/2026, section 6 -- n8n
+// node, see SESSION_LOG.md). Tests core.js#analyze() with config.glossary,
+// not just the shared glossary-source.js module directly (covered by
+// miravig-tests/glossary-groups.test.js) -- here we verify the real
+// integration: merging with native detections, masking by the
+// 'business-term' category, behavior through the public API that
+// Miravig.node.ts calls.
 
 const { analyze } = require('../nodes/Miravig/lib/core.js');
 
@@ -58,7 +58,7 @@ console.log('--- Groupes actifs positionnés statiquement (paramètre string fig
 {
 	const glossary = {
 		terms: [{ term: 'Alpha7', groups: ['Général'] }],
-		activeGroups: ['Général', 'Projet Bravo'], // simule "Général, Projet Bravo" splitté par Miravig.node.ts
+		activeGroups: ['Général', 'Projet Bravo'], // simulates "Général, Projet Bravo" split by Miravig.node.ts
 	};
 	const r = analyze('Référence Alpha7 confirmée.', { glossary });
 	assert(r.hasDetections === true, 'liste de groupes actifs statique, terme détecté');

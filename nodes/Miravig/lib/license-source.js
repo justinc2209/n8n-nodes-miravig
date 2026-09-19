@@ -23,29 +23,29 @@ const LICENSE_PUBLIC_KEY_JWK = {
   crv: 'P-256',
 };
 
-// Doit rester rigoureusement identique à buildLicenseSignaturePayload() dans
-// account.worker.js et dans license.js (web app/extension) -- texte exact
-// couvert par la signature des 4 côtés désormais.
+// Must stay strictly identical to buildLicenseSignaturePayload() in
+// account.worker.js and in license.js (web app/extension) -- the exact
+// text covered by the signature on all 4 sides now.
 function buildLicenseSignaturePayload({ licenseKey, status, checkedAt }) {
   return JSON.stringify({ k: licenseKey, s: status, t: checkedAt });
 }
 
-// Variante "hachée" (audit Semgrep du 21/08/2026, voir SESSION_LOG.md) :
-// seul consommateur, Miravig.node.ts -- workflowStaticData (où ce cache
-// vit) est exporté avec le workflow, contrairement à localStorage/
-// chrome.storage.local (privés, jamais partagés) côté web app/extension.
-// buildLicenseSignaturePayload() ci-dessus (avec `k`, la licence en clair)
-// reste inchangée et continue de servir les deux autres surfaces --
-// celle-ci est un AJOUT, jamais un remplacement. Doit rester identique à
-// buildLicenseSignaturePayloadHashed() dans account.worker.js.
+// "Hashed" variant (Semgrep audit from 21/08/2026, see SESSION_LOG.md):
+// its only consumer is Miravig.node.ts -- workflowStaticData (where this
+// cache lives) is exported with the workflow, unlike localStorage/
+// chrome.storage.local (private, never shared) on the web app/extension
+// side. buildLicenseSignaturePayload() above (with `k`, the plaintext
+// license) stays unchanged and keeps serving the other two surfaces --
+// this one is an ADDITION, never a replacement. Must stay identical to
+// buildLicenseSignaturePayloadHashed() in account.worker.js.
 function buildLicenseSignaturePayloadHashed({ licenseKeyHash, status, checkedAt }) {
   return JSON.stringify({ kh: licenseKeyHash, s: status, t: checkedAt });
 }
 
-// sha256 hex, mêmes octets UTF-8 que sha256Hex() côté Worker
-// (crypto.subtle.digest('SHA-256', ...) sur la même chaîne produit le même
-// résultat) -- vérifié par test/license-hashed.test.js contre une valeur de
-// référence fixe, pas seulement supposé identique.
+// sha256 hex, same UTF-8 bytes as sha256Hex() on the Worker side
+// (crypto.subtle.digest('SHA-256', ...) on the same string produces the
+// same result) -- verified by test/license-hashed.test.js against a
+// fixed reference value, not just assumed identical.
 function sha256Hex(text) {
   return require('node:crypto').createHash('sha256').update(String(text), 'utf8').digest('hex');
 }
@@ -54,22 +54,22 @@ function base64ToBytes(b64) {
   return new Uint8Array(Buffer.from(b64, 'base64'));
 }
 
-// Ce fichier ne tourne que côté Node (node n8n exécuté par le serveur n8n),
-// jamais dans un navigateur ni un Worker -- contrairement à l'original dont
-// ce code est porté (extension-gardefou/license.js), où la double voie
-// navigateur/Node a un vrai rôle. Un seul chemin ici, pas de détection
-// d'environnement à faire.
+// This file only runs on the Node side (the n8n node executed by the n8n
+// server), never in a browser or a Worker -- unlike the original this
+// code was ported from (extension-gardefou/license.js), where the dual
+// browser/Node path has a real role. A single path here, no environment
+// detection needed.
 function getSubtle() {
   return require('node:crypto').webcrypto.subtle;
 }
 
-// Vérification générique avec une clé publique JWK arbitraire -- séparée de
-// verifyLicenseSignature() ci-dessous uniquement pour rester testable avec
-// un couple de clés de test (test/license.test.js) sans jamais avoir besoin
-// de la clé PRIVÉE de production (qui ne quitte jamais le Worker). Le
-// chemin réellement utilisé en exécution (verifyLicenseSignature) reste,
-// lui, câblé en dur sur LICENSE_PUBLIC_KEY_JWK -- ce n'est pas un point de
-// configuration, juste un point de test.
+// Generic verification with an arbitrary JWK public key -- separated from
+// verifyLicenseSignature() below only to stay testable with a test key
+// pair (test/license.test.js) without ever needing the production
+// PRIVATE key (which never leaves the Worker). The path actually used at
+// runtime (verifyLicenseSignature) stays hardcoded to
+// LICENSE_PUBLIC_KEY_JWK -- this isn't a configuration point, just a
+// testing one.
 async function verifySignatureWithKey(jwk, record) {
   if (!record || !record.signature || !record.checkedAt || !record.status || !record.licenseKey) return false;
   try {
@@ -83,18 +83,17 @@ async function verifySignatureWithKey(jwk, record) {
   }
 }
 
-// Vérifie qu'un enregistrement de statut de licence mis en cache
-// (workflowStaticData) a bien été émis par le Worker Miravig et n'a pas été
-// modifié depuis (édition manuelle du JSON de staticData, par exemple) --
-// jamais de confiance aveugle dans une valeur simplement lue depuis un
-// stockage local.
+// Verifies that a cached license-status record (workflowStaticData) was
+// genuinely issued by the Miravig Worker and hasn't been modified since
+// (e.g. a manual edit of staticData's JSON) -- never blind trust in a
+// value simply read back from local storage.
 function verifyLicenseSignature(record) {
   return verifySignatureWithKey(LICENSE_PUBLIC_KEY_JWK, record);
 }
 
-// Équivalent de verifySignatureWithKey ci-dessus pour la variante hachée --
-// séparée pour la même raison (testable avec un couple de clés de test,
-// voir test/license-hashed.test.js).
+// Equivalent of verifySignatureWithKey above for the hashed variant --
+// separated for the same reason (testable with a test key pair, see
+// test/license-hashed.test.js).
 async function verifySignatureWithKeyHashed(jwk, record) {
   if (!record || !record.signatureHashed || !record.checkedAt || !record.status || !record.licenseKeyHash) return false;
   try {
@@ -108,14 +107,14 @@ async function verifySignatureWithKeyHashed(jwk, record) {
   }
 }
 
-// Vérifie un enregistrement de cache hachée -- `record` est construit par
-// l'appelant (Miravig.node.ts) en combinant {status, checkedAt,
-// signatureHashed} venant de workflowStaticData avec un `licenseKeyHash`
-// recalculé À LA VOLÉE depuis la clé réellement configurée dans la
-// credential courante (jamais lu depuis le cache) -- une signature valide
-// prouve donc à la fois que le Worker a bien émis ce statut ET que le cache
-// correspond à la clé actuellement configurée, sans jamais avoir eu besoin
-// de persister la clé elle-même.
+// Verifies a hashed cache record -- `record` is built by the caller
+// (Miravig.node.ts) by combining {status, checkedAt, signatureHashed}
+// from workflowStaticData with a `licenseKeyHash` recomputed ON THE FLY
+// from the key actually configured in the current credential (never read
+// from the cache) -- a valid signature therefore proves both that the
+// Worker genuinely issued this status AND that the cache matches the
+// currently configured key, without ever needing to persist the key
+// itself.
 function verifyLicenseSignatureHashed(record) {
   return verifySignatureWithKeyHashed(LICENSE_PUBLIC_KEY_JWK, record);
 }

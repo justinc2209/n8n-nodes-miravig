@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * copy-icons.js — postbuild : tsc ne copie jamais les fichiers .svg/.png
- * vers dist/, seulement les .ts qu'il compile. Sans cette étape, les
- * références `icon: 'file:miravig.svg'` (Miravig.node.ts,
- * MiravigApi.credentials.ts) pointeraient vers un fichier absent dans le
- * paquet publié -- trouvé en corrigeant le finding de scan officiel n8n
- * "Icon file miravig.svg does not exist" du 03/09/2026.
+ * copy-icons.js — postbuild: tsc never copies .svg/.png files to dist/,
+ * only the .ts files it compiles. Without this step, the
+ * `icon: 'file:miravig.svg'` references (Miravig.node.ts,
+ * MiravigApi.credentials.ts) would point to a missing file in the
+ * published package -- found while fixing the official n8n scan finding
+ * "Icon file miravig.svg does not exist" from 03/09/2026.
  */
 const fs = require('fs');
 const path = require('path');

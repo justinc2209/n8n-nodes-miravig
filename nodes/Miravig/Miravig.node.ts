@@ -7,40 +7,41 @@ import type {
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
-// La logique métier reste en JS pur, testée indépendamment de n8n (voir
-// lib/core.js, lib/license-source.js et leurs suites de tests) — ce
-// fichier ne fait que traduire les paramètres n8n en configuration pour
-// core.analyze()/core.demasquerText(), et inversement pour la sortie.
+// Business logic stays in plain JS, tested independently of n8n (see
+// lib/core.js, lib/license-source.js and their test suites) -- this
+// file only translates n8n parameters into configuration for
+// core.analyze()/core.demasquerText(), and back for the output.
 //
-// Fusion des deux anciens nodes (Miravig masquage + MiravigDemasquer) en un
-// seul type avec un paramètre "Operation" -- revient sur la décision du
-// 12/08/2026 documentée dans l'historique de MiravigDemasquer.node.ts (deux
-// nodes séparés). Revirement assumé lors du cadrage du 12/08/2026 (suite) :
-// aucun utilisateur externe du node à ce jour (jamais publié sur npm), donc
-// aucune migration à gérer -- voir la discussion de cadrage pour le détail
-// des raisons (conformité "un package = un service" de la vérification n8n
-// notamment). Le workflow final continue de poser DEUX INSTANCES de ce
-// node (une en "Mask" avant le LLM, une en "Unmask" après) -- inchangé.
+// Merges the two former nodes (Miravig masking + MiravigDemasquer) into a
+// single type with an "Operation" parameter -- reverses the decision from
+// 12/08/2026 documented in MiravigDemasquer.node.ts's history (two
+// separate nodes). Reversal decided during the 12/08/2026 scoping session
+// (follow-up): no external user of the node to date (never published on
+// npm), so no migration to manage -- see the scoping discussion for the
+// full reasoning (n8n verification's "one package = one service"
+// compliance, among others). The final workflow still requires TWO
+// INSTANCES of this node (one in "Mask" mode before the LLM, one in
+// "Unmask" mode after) -- unchanged.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const core = require('./lib/core.js');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const license = require('./lib/license-source.js');
 
-// URL réelle du Worker de licence (confirmée dans le dépôt le 12/08/2026 --
-// même Worker que l'extension et le web app, extension-gardefou/license.js
-// et Miravig V3/license.js). L'ancien endpoint /quota/check (compte +
-// apiKey) est abandonné : ce système n'a aucune UI de création de compte
-// côté produit et n'est appelé nulle part en dehors des tests -- voir la
-// discussion de cadrage du 12/08/2026. Le node utilise désormais
-// directement /license/validate, comme l'extension/web app.
+// Real URL of the license Worker (confirmed in the repo on 12/08/2026 --
+// same Worker as the extension and web app, extension-gardefou/license.js
+// and Miravig V3/license.js). The old /quota/check endpoint (account +
+// apiKey) is abandoned: that system has no product-side account-creation
+// UI and is never called outside of tests -- see the scoping discussion
+// from 12/08/2026. The node now calls /license/validate directly, like
+// the extension/web app.
 const LICENSE_VALIDATE_URL = 'https://miravig-account.miravig-metrics.workers.dev/license/validate';
 
-// Revalidation périodique plutôt qu'à chaque exécution (décision de
-// cadrage du 12/08/2026) : 15 minutes, volontairement plus court que les
-// 72h utilisées côté extension/web app -- un workflow n8n peut tourner sans
-// supervision humaine pendant des jours, une résiliation d'abonnement doit
-// se répercuter plus vite qu'un usage interactif où l'utilisateur rouvrirait
-// de toute façon le panneau régulièrement.
+// Periodic revalidation rather than on every execution (scoping decision
+// from 12/08/2026): 15 minutes, deliberately shorter than the 72h used on
+// the extension/web app side -- an n8n workflow can run unsupervised for
+// days, a cancelled subscription needs to propagate faster than in an
+// interactive surface where the user would reopen the panel regularly
+// anyway.
 const LICENSE_CACHE_MS = 15 * 60 * 1000;
 
 const ALL_CATEGORIES = [
@@ -57,20 +58,21 @@ const ALL_CATEGORIES = [
 	'business-term',
 ];
 
-// Couche de traduction français -> anglais, appliquée uniquement en sortie
-// de ce node -- ne touche jamais lib/rules-source.js ni lib/glossary-source.js
-// (moteur partagé bit-à-bit identique à l'extension et au web app, hors
-// périmètre de cette session ; les y traduire changerait le comportement des
-// deux autres produits). Découvert en testant en conditions réelles
-// (12/08/2026, suite) : les libellés de detectSensitiveData() sont déjà
-// correctement traduits via son paramètre `locale` (voir rules-source.js,
-// fonction L(fr, en)) -- seul le libellé du glossaire métier
-// (glossary-source.js, detectGlossaryMatches) est câblé en dur en français,
-// sans notion de locale. Une table plutôt qu'un paramètre `locale` ajouté au
-// module partagé : plus petite surface de changement, aucun risque sur les
-// deux autres produits. Repli explicite sur la chaîne d'origine si jamais un
-// nouveau libellé français apparaissait côté moteur partagé sans être ajouté
-// ici -- jamais un texte vide ou une exception, juste pas encore traduit.
+// French -> English translation layer, applied only at this node's
+// output -- never touches lib/rules-source.js or lib/glossary-source.js
+// (shared engine, bit-for-bit identical to the extension and web app, out
+// of scope for this session; translating it there would change the
+// behavior of the two other products). Discovered while testing under
+// real conditions (12/08/2026, follow-up): detectSensitiveData()'s labels
+// are already correctly translated via its `locale` parameter (see
+// rules-source.js, function L(fr, en)) -- only the business glossary
+// label (glossary-source.js, detectGlossaryMatches) is hardcoded in
+// French, with no locale concept. A lookup table rather than adding a
+// `locale` parameter to the shared module: a smaller surface of change,
+// no risk to the two other products. Explicit fallback to the original
+// string if a new French label ever appeared on the shared-engine side
+// without being added here -- never an empty string or an exception,
+// just not translated yet.
 const FRENCH_TO_ENGLISH_DETECTION_LABELS: Record<string, string> = {
 	'Terme du glossaire métier': 'Business glossary term',
 };
@@ -85,12 +87,13 @@ function translateDetections(
 	return detections.map((d) => ({ ...d, label: translateDetectionLabel(d.label) }));
 }
 
-// Ne contient jamais la licence en clair (audit Semgrep du 21/08/2026, voir
-// SESSION_LOG.md) : workflowStaticData (où ce record est persisté) est
-// exporté avec le workflow, contrairement à localStorage/chrome.storage.local
-// (privés, jamais partagés) côté web app/extension. licenseKeyHash est
-// recalculé à la volée depuis la credential à chaque vérification, jamais lu
-// depuis ce record -- voir checkLicense() plus bas.
+// Never contains the license key in plain text (Semgrep audit from
+// 21/08/2026, see SESSION_LOG.md): workflowStaticData (where this record
+// is persisted) is exported with the workflow, unlike
+// localStorage/chrome.storage.local (private, never shared) on the web
+// app/extension side. licenseKeyHash is recomputed on the fly from the
+// credential on every check, never read back from this record -- see
+// checkLicense() below.
 interface LicenseCacheRecord {
 	status: string;
 	checkedAt: number;
@@ -98,13 +101,13 @@ interface LicenseCacheRecord {
 }
 
 interface LicenseCheckResult {
-	// false = aucune clé fournie, aucun appel réseau tenté (utilisateur
-	// gratuit -- cas normal, pas une erreur).
+	// false = no key provided, no network call attempted (free user --
+	// normal case, not an error).
 	checked: boolean;
-	// null = impossible à déterminer (échec réseau, choix "continuer" --
-	// traité comme non-licencié par précaution, jamais comme licencié par
-	// défaut : cohérent avec le comportement fail-closed déjà en place
-	// côté extension, voir license.js#validate).
+	// null = impossible to determine (network failure, "continue" choice --
+	// treated as not licensed as a precaution, never as licensed by
+	// default: consistent with the fail-closed behavior already in place
+	// on the extension side, see license.js#validate).
 	valid: boolean | null;
 	warning: string | null;
 }
@@ -115,22 +118,22 @@ function deriveStatus(data: IDataObject): string {
 	return data.valid === true ? 'active' : 'inactive';
 }
 
-// Vérifie la licence auprès du Worker (ou du cache workflowStaticData s'il
-// est encore frais et signé valide) -- une seule fois par exécution du
-// node, jamais par élément d'un lot (même principe que l'ancien
-// /quota/check, décision Session 29/07/2026). N'appelle le réseau QUE si
-// une clé est configurée : un utilisateur gratuit qui ne demande ni
-// masquage ni glossaire métier ne déclenche jamais cette fonction (voir
-// execute()), et un utilisateur gratuit qui les demande quand même reçoit
-// un message de gating explicite sans jamais avoir eu besoin d'une clé.
+// Checks the license against the Worker (or the workflowStaticData cache
+// if it is still fresh and validly signed) -- once per node execution,
+// never per item in a batch (same principle as the old /quota/check,
+// Session decision from 29/07/2026). Only calls the network IF a key is
+// configured: a free user who requests neither masking nor the business
+// glossary never triggers this function (see execute()), and a free user
+// who requests them anyway gets an explicit gating message without ever
+// needing a key.
 async function checkLicense(ctx: IExecuteFunctions, licenseKey: string): Promise<LicenseCheckResult> {
 	if (!licenseKey) return { checked: false, valid: false, warning: null };
 
-	// licenseKeyHash recalculé ICI, depuis la clé réellement configurée dans
-	// la credential -- jamais lu depuis workflowStaticData. Sert à la fois de
-	// clé de cache (aucun fragment de la licence en clair, même partiel, dans
-	// un nom de propriété qui finit dans le JSON exporté) et de valeur
-	// couverte par la signature vérifiée plus bas.
+	// licenseKeyHash recomputed HERE, from the key actually configured in
+	// the credential -- never read from workflowStaticData. Serves both as
+	// the cache key (no fragment of the plaintext license, even partial, in
+	// a property name that ends up in the exported JSON) and as the value
+	// covered by the signature verified below.
 	const licenseKeyHash = license.sha256Hex(licenseKey);
 	const staticData = ctx.getWorkflowStaticData('node') as IDataObject;
 	const cacheKey = `licenseCache_${licenseKeyHash.slice(0, 16)}`;
@@ -150,22 +153,22 @@ async function checkLicense(ctx: IExecuteFunctions, licenseKey: string): Promise
 			url: LICENSE_VALIDATE_URL,
 			body: { licenseKey },
 			json: true,
-			// Le Worker renvoie 400/403 avec un corps JSON exploitable
-			// (licence invalide/n'appartenant pas à Miravig) -- ce n'est
-			// PAS un échec de vérification (le réseau fonctionne, la
-			// réponse est sans ambiguïté), donc ça ne doit jamais tomber
-			// dans le même bloc catch qu'une vraie panne réseau.
+			// The Worker returns 400/403 with a usable JSON body
+			// (invalid license / doesn't belong to Miravig) -- this is
+			// NOT a verification failure (the network works, the
+			// response is unambiguous), so it must never fall into the
+			// same catch block as a genuine network failure.
 			ignoreHttpStatusErrors: true,
-			// Découvert en testant en conditions réelles (12/08/2026, suite) :
-			// sans timeout explicite, un Worker qui accepte la connexion mais
-			// ne répond jamais bloque le workflow indéfiniment -- jamais
-			// atteint la logique onLicenseCheckFailure. 10s : la vérification
-			// n'a lieu qu'une fois toutes les LICENSE_CACHE_MS grâce au cache
-			// (15 min en production), un délai occasionnel de 10s au pire
-			// n'affecte donc pas la fluidité du reste. Un timeout se résout
-			// en rejet de promesse comme n'importe quelle autre panne réseau
-			// (DNS, connexion refusée...) -- intercepté par le même bloc
-			// catch ci-dessous, aucun chemin de code séparé à maintenir.
+			// Discovered while testing under real conditions (12/08/2026,
+			// follow-up): without an explicit timeout, a Worker that accepts
+			// the connection but never responds blocks the workflow
+			// indefinitely -- never reaching the onLicenseCheckFailure
+			// logic. 10s: the check only happens once per LICENSE_CACHE_MS
+			// thanks to the cache (15 min in production), so an occasional
+			// 10s delay at worst does not affect the smoothness of the
+			// rest. A timeout resolves as a rejected promise like any other
+			// network failure (DNS, connection refused...) -- caught by the
+			// same catch block below, no separate code path to maintain.
 			timeout: 10000,
 		})) as IDataObject;
 
@@ -179,20 +182,21 @@ async function checkLicense(ctx: IExecuteFunctions, licenseKey: string): Promise
 
 		return { checked: true, valid: response.valid === true, warning: null };
 	} catch (error) {
-		// Panne réseau réelle (Worker injoignable, DNS, timeout...) -- PAS
-		// une réponse explicite du Worker (ce cas est déjà couvert par
-		// `response.valid` ci-dessus, qui ne passe jamais par ce bloc catch).
-		// Révision de cadrage du 12/08/2026 (suite) : le fail-closed ne doit
-		// s'appliquer qu'à une réponse EXPLICITE "invalid" du Worker, pas à
-		// une simple panne réseau -- une panne retombe sur le DERNIER statut
-		// vérifié en cache (valid ou invalid, peu importe lequel), pas
-		// systématiquement sur "non licencié". La fraîcheur (15 min) ne
-		// s'applique qu'au chemin nominal ci-dessus ; ici, c'est un repli de
-		// dernier recours, un cache signé même périmé reste une meilleure
-		// information qu'aucune. Seule l'absence totale de cache exploitable
-		// (jamais vérifié avec succès sur ce node, ou signature invalide --
-		// falsifié ou corrompu) retombe sur l'ancien comportement
-		// fail-closed ("valid: null"), faute de mieux.
+		// Genuine network failure (Worker unreachable, DNS, timeout...) -- NOT
+		// an explicit response from the Worker (that case is already covered
+		// by `response.valid` above, which never falls into this catch
+		// block). Scoping revision from 12/08/2026 (follow-up): fail-closed
+		// should only apply to an EXPLICIT "invalid" response from the
+		// Worker, not to a plain network failure -- a failure falls back to
+		// the LAST verified status in cache (valid or invalid, whichever it
+		// is), not systematically to "not licensed". Freshness (15 min)
+		// only applies to the nominal path above; here, this is a
+		// last-resort fallback, a signed cache even if stale is still
+		// better information than none. Only a total absence of a usable
+		// cache (never successfully verified on this node, or an invalid
+		// signature -- forged or corrupted) falls back to the old
+		// fail-closed behavior ("valid: null"), for lack of anything
+		// better.
 		if (
 			cached &&
 			(await license.verifyLicenseSignatureHashed({ licenseKeyHash, status: cached.status, checkedAt: cached.checkedAt, signatureHashed: cached.signatureHashed }))
@@ -222,11 +226,10 @@ interface GatingResult {
 	gatingMessage: string | null;
 }
 
-// Résout le gating masquage/glossaire métier pour une exécution -- jamais
-// de retour silencieux à un comportement dégradé : si l'une des deux
-// fonctionnalités payantes est demandée sans licence valide, le message
-// l'explique toujours dans la sortie plutôt que de simplement ne rien
-// faire sans un mot.
+// Resolves masking/business-glossary gating for one execution -- never a
+// silent fallback to degraded behavior: if either paid feature is
+// requested without a valid license, the output always explains it
+// rather than just silently doing nothing.
 async function resolveGating(
 	ctx: IExecuteFunctions,
 	licenseKey: string,
@@ -246,10 +249,11 @@ async function resolveGating(
 		};
 	}
 
-	// Le champ a un default ('stop') désormais -- ce garde-fou ne protège
-	// plus contre un champ laissé vide, mais reste utile contre une
-	// expression n8n ({{ }}) qui résoudrait vers autre chose que 'stop' ou
-	// 'continue' à l'exécution (le champ n'a pas noDataExpression).
+	// The field now has a default ('stop') -- this guard no longer protects
+	// against a field left empty, but is still useful against an n8n
+	// expression ({{ }}) that would resolve to something other than
+	// 'stop' or 'continue' at runtime (the field doesn't have
+	// noDataExpression).
 	if (onLicenseCheckFailure !== 'stop' && onLicenseCheckFailure !== 'continue') {
 		throw new NodeOperationError(
 			ctx.getNode(),
@@ -260,12 +264,12 @@ async function resolveGating(
 
 	const result = await checkLicense(ctx, licenseKey);
 
-	// "stop" ne coupe plus l'exécution sur N'IMPORTE quel avertissement --
-	// seulement quand `valid` reste réellement indéterminé (`null`, aucun
-	// cache exploitable pour se rattraper). Un repli réussi sur un cache
-	// signé (voir checkLicense) porte un avertissement informatif mais
-	// aboutit à une vraie valeur booléenne : le workflow continue sur cette
-	// base, "stop" n'a rien à interrompre.
+	// "stop" no longer cuts execution on ANY warning -- only when `valid`
+	// remains genuinely indeterminate (`null`, no usable cache to fall
+	// back on). A successful fallback to a signed cache (see checkLicense)
+	// carries an informational warning but resolves to a real boolean
+	// value: the workflow continues on that basis, "stop" has nothing to
+	// interrupt.
 	if (result.valid === null && onLicenseCheckFailure === 'stop') {
 		throw new NodeOperationError(
 			ctx.getNode(),
@@ -326,25 +330,25 @@ export class Miravig implements INodeType {
 		defaults: { name: 'Miravig' },
 		usableAsTool: true,
 		inputs: [NodeConnectionTypes.Main],
-		// Une seule sortie par défaut (spec de cadrage du 12/08/2026) :
-		// la 2e sortie ("Flagged") n'apparaît que si l'utilisateur active
-		// explicitement "Route Flagged Items to a Second Output" en mode
-		// Mask -- réduit la ressemblance avec un node de flux (IF-like) par
-		// défaut, point de vigilance identifié pour la vérification n8n
-		// (classification "logic/flow control", jamais tranché formellement
-		// avec la documentation n8n -- à vérifier séparément avant
-		// soumission, voir README).
+		// A single output by default (12/08/2026 scoping spec): the 2nd
+		// output ("Flagged") only appears if the user explicitly enables
+		// "Route Flagged Items to a Second Output" in Mask mode --
+		// reduces the resemblance to a flow-control node (IF-like) by
+		// default, a concern flagged for n8n verification ("logic/flow
+		// control" classification, never formally settled against n8n's
+		// documentation -- to check separately before submission, see
+		// README).
 		outputs:
 			'={{$parameter["operation"] === "mask" && $parameter["enableRoutingOutput"] === true ? ["main", "main"] : ["main"]}}',
-		// outputNames n'accepte pas d'expression (contrairement à `outputs`,
-		// voir n8n-workflow/Interfaces.d.ts) -- tableau fixe, sans effet
-		// quand une seule sortie est résolue (le 2e nom est simplement
-		// inutilisé).
+		// outputNames does not accept an expression (unlike `outputs`, see
+		// n8n-workflow/Interfaces.d.ts) -- a fixed array, with no effect
+		// when only one output is resolved (the 2nd name is simply
+		// unused).
 		outputNames: ['Result', 'Flagged'],
-		// Le test du bouton "Test" de l'UI credentials est déclaratif
-		// (MiravigApi.credentials.ts, propriété `test`), pas `testedBy` ici --
-		// voir le commentaire sur `test` dans ce fichier pour pourquoi les
-		// deux mécanismes ne peuvent pas coexister.
+		// The credentials UI's "Test" button test is declarative
+		// (MiravigApi.credentials.ts, `test` property), not `testedBy`
+		// here -- see the comment on `test` in that file for why the two
+		// mechanisms can't coexist.
 		credentials: [{ name: 'miravigApi', required: false }],
 		properties: [
 			{
@@ -457,10 +461,10 @@ export class Miravig implements INodeType {
 				displayName: 'On License Check Failure',
 				name: 'onLicenseCheckFailure',
 				type: 'options',
-				// default: 'stop' -- le plus protecteur des deux (le workflow
-				// s'arrête plutôt que de continuer sans licence vérifiable) : un
-				// utilisateur qui ne touche jamais ce champ obtient le
-				// comportement le plus sûr, pas une dégradation silencieuse.
+				// default: 'stop' -- the more protective of the two (the
+				// workflow stops rather than continuing without a verifiable
+				// license): a user who never touches this field gets the
+				// safest behavior, not a silent degradation.
 				default: 'stop',
 				required: true,
 				displayOptions: { show: { operation: ['mask'] } },
@@ -504,8 +508,8 @@ export class Miravig implements INodeType {
 				displayName: 'On Unmask Failure',
 				name: 'onLookupFailure',
 				type: 'options',
-				// default: 'stop', même raisonnement que "On License Check
-				// Failure" ci-dessus : le plus protecteur des deux options.
+				// default: 'stop', same reasoning as "On License Check
+				// Failure" above: the more protective of the two options.
 				default: 'stop',
 				required: true,
 				displayOptions: { show: { operation: ['unmask'] } },
@@ -530,16 +534,16 @@ export class Miravig implements INodeType {
 				name: 'businessGlossary',
 				type: 'json',
 				default: '[]',
-				// Pas d'exemple JSON littéral ici (voir README pour le format
-				// exact et complet) -- une ancienne version citait la clé "id"
-				// entre guillemets dans cette description, ce que la règle de
-				// lint node-param-description-miscased-id signale comme un
-				// terme à mettre en majuscules ("ID"). Le champ réel du code
-				// est bien "id" en minuscules (entry.id/term.id, voir
-				// lib/glossary-source.js et lib/core.js) -- documenter "ID" ici
-				// aurait été trompeur. Prose uniquement, sans le mot "id" isolé
-				// entre guillemets, pour satisfaire la règle honnêtement plutôt
-				// que par un correctif qui aurait introduit une inexactitude.
+				// No literal JSON example here (see README for the exact,
+				// complete format) -- an older version quoted the "id" key in
+				// this description, which the node-param-description-miscased-id
+				// lint rule flags as a term to capitalize ("ID"). The real
+				// field in the code is indeed lowercase "id" (entry.id/term.id,
+				// see lib/glossary-source.js and lib/core.js) -- documenting
+				// "ID" here would have been misleading. Prose only, without
+				// the standalone quoted word "id", to satisfy the rule
+				// honestly rather than with a fix that would have introduced
+				// an inaccuracy.
 				description:
 					'Terms to detect (Mask mode) or resolve (Unmask mode) in addition to the native categories, pasted manually -- never read from a user\'s real glossary (no network sync). Requires an active Miravig subscription in both modes (see node credentials); same JSON on both the Mask and Unmask instances of this node in a workflow. See the README ("Business Glossary (JSON)" section) for the exact format: each entry needs a "term", plus an optional stable numeric identifier (recommended whenever available, e.g. from a CSV export of the web app/extension glossary) and optional groups. "groups" is optional and Mask-mode only -- a term without a group is always active regardless of "Active Glossary Groups".',
 			},
@@ -549,20 +553,20 @@ export class Miravig implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 
-		// Operation et bascule de sortie déterminent la FORME du node
-		// (nombre de sorties) -- résolues une fois pour l'exécution entière,
-		// pas par élément, cohérent avec la façon dont `outputs` lui-même
-		// n'est évalué qu'une fois par n8n (pas par item).
+		// Operation and the output toggle determine the node's SHAPE
+		// (number of outputs) -- resolved once for the whole execution,
+		// not per item, consistent with how `outputs` itself is only
+		// evaluated once by n8n (not per item).
 		const operation = this.getNodeParameter('operation', 0) as string;
 		const enableRoutingOutput =
 			operation === 'mask' ? (this.getNodeParameter('enableRoutingOutput', 0, false) as boolean) : false;
 		const outputCount = operation === 'mask' && enableRoutingOutput ? 2 : 1;
 		const outputs: INodeExecutionData[][] = Array.from({ length: outputCount }, () => []);
 
-		// Licence lue une seule fois par exécution (pas par élément d'un
-		// lot) -- même principe que l'ancien /quota/check (décision Session
-		// 29/07/2026). Credential absente = utilisateur gratuit, cas normal,
-		// jamais une erreur : `required: false` sur la credential le permet.
+		// License read once per execution (not per item in a batch) --
+		// same principle as the old /quota/check (Session decision from
+		// 29/07/2026). Missing credential = free user, a normal case,
+		// never an error: `required: false` on the credential allows it.
 		const credentials = await this.getCredentials('miravigApi').catch(() => undefined);
 		const licenseKey = ((credentials?.licenseKey as string) || '').trim();
 
@@ -608,10 +612,10 @@ async function executeMask(
 		i,
 	);
 
-	// Un glossaire non appliqué (non licencié) n'est jamais transmis à
-	// analyze() -- la détection elle-même du glossaire métier est la
-	// fonctionnalité payante (pas seulement son masquage), voir la
-	// discussion de cadrage du 12/08/2026 sur le modèle économique.
+	// A glossary that isn't applied (not licensed) is never passed to
+	// analyze() -- detection of the business glossary itself is the paid
+	// feature (not just its masking), see the 12/08/2026 scoping
+	// discussion on the pricing model.
 	const effectiveGlossaryTerms = gating.businessGlossaryApplied ? businessGlossaryTerms : [];
 
 	const result = core.analyze(text, {
@@ -629,13 +633,12 @@ async function executeMask(
 		items[i].binary &&
 		Object.prototype.hasOwnProperty.call(items[i].binary, binaryPropertyName);
 
-	// Empreinte du glossaire toujours calculée sur le glossaire TEL QUE
-	// CONFIGURÉ (pas seulement celui effectivement appliqué) : un node
-	// Unmask en aval doit pouvoir détecter une désynchronisation même dans
-	// les cas de gating (ex. le masquage a été refusé ici faute de licence
-	// -- il n'y a alors aucun placeholder à comparer, mais si la config
-	// affichait quand même un glossaire nonvide on le documente pour
-	// cohérence avec le reste de la sortie).
+	// Glossary checksum always computed on the glossary AS CONFIGURED (not
+	// just the one actually applied): a downstream Unmask node must be
+	// able to detect a desync even in gating cases (e.g. masking was
+	// refused here for lack of a license -- there is then no placeholder
+	// to compare, but if the config still showed a non-empty glossary we
+	// document it for consistency with the rest of the output).
 	const glossaryChecksum =
 		gating.maskingApplied && effectiveGlossaryTerms.length > 0
 			? core.glossaryChecksum(effectiveGlossaryTerms)
@@ -695,9 +698,9 @@ async function executeUnmask(
 	const onLookupFailure = ctx.getNodeParameter('onLookupFailure', i) as string;
 	const businessGlossaryRaw = ctx.getNodeParameter('businessGlossary', i, '[]') as string;
 
-	// Même raisonnement que le garde-fou de resolveGating() ci-dessus : le
-	// champ a un default ('stop') désormais, ce test protège contre une
-	// expression n8n résolvant vers autre chose, pas contre un champ vide.
+	// Same reasoning as resolveGating()'s guard above: the field now has
+	// a default ('stop'), this check protects against an n8n expression
+	// resolving to something else, not against an empty field.
 	if (onLookupFailure !== 'stop' && onLookupFailure !== 'continue') {
 		throw new NodeOperationError(
 			ctx.getNode(),
@@ -716,14 +719,14 @@ async function executeUnmask(
 
 	const businessGlossaryTerms = parseBusinessGlossary(ctx, businessGlossaryRaw, i);
 
-	// Checksum désynchronisation (garde-fou de cadrage du 12/08/2026) :
-	// comparaison TOUJOURS "continuer avec avertissement visible", jamais
-	// bloquante -- sévérité distincte, volontairement plus faible, de
-	// "onLookupFailure" ci-dessus (qui gère un échec de résolution PAR
-	// placeholder, potentiellement bloquant sur choix explicite de
-	// l'utilisateur). Les deux mécanismes sont orthogonaux et coexistent :
-	// le checksum donne un signal précoce, non bloquant, qui pointe vers la
-	// cause probable si onLookupFailure finit par déclencher une erreur.
+	// Desync checksum (12/08/2026 scoping guard): comparison ALWAYS
+	// "continue with a visible warning", never blocking -- a distinct,
+	// deliberately lower severity than "onLookupFailure" above (which
+	// handles a resolution failure PER placeholder, potentially blocking
+	// on the user's explicit choice). The two mechanisms are orthogonal
+	// and coexist: the checksum gives an early, non-blocking signal that
+	// points to the likely cause if onLookupFailure ends up throwing an
+	// error.
 	const incomingMiravig = (items[i].json.miravig as IDataObject | undefined) || {};
 	const incomingBusinessGlossary = (incomingMiravig.businessGlossary as IDataObject | undefined) || {};
 	const incomingChecksum = (incomingBusinessGlossary.checksum as string | undefined) || null;

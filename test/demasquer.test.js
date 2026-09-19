@@ -1,9 +1,9 @@
 'use strict';
 
-// Node "Miravig — Démasquer" (spec du 12/08/2026, numérotation stable du
-// glossaire, voir SESSION_LOG.md). Teste core.js#demasquerText -- la
-// logique pure appelée par MiravigDemasquer.node.ts, indépendamment du
-// wrapper n8n (même convention que test/glossary.test.js pour analyze()).
+// "Miravig — Démasquer" node (spec from 12/08/2026, stable glossary
+// numbering, see SESSION_LOG.md). Tests core.js#demasquerText -- the pure
+// logic called by MiravigDemasquer.node.ts, independent of the n8n
+// wrapper (same convention as test/glossary.test.js for analyze()).
 
 const { demasquerText, glossaryChecksum, hasUnresolvedGlossaryPlaceholders } = require('../nodes/Miravig/lib/core.js');
 
@@ -32,9 +32,9 @@ console.log('--- Démasquage partiel : taux exact affiché, jamais un résultat 
 
 console.log('--- id de repli par position (spec section 6/11) : même snapshot dans les 2 instances ---');
 {
-	// Simule 2 instances du workflow (masquer puis démasquer) recevant
-	// exactement le même JSON, dans le même ordre, sans id explicite --
-	// scénario nominal documenté dans le README.
+	// Simulates 2 workflow instances (mask then unmask) receiving exactly
+	// the same JSON, in the same order, with no explicit id -- the nominal
+	// scenario documented in the README.
 	const glossaryPourMasquage = { terms: [{ term: 'Alpha' }, { term: 'Bravo' }], activeGroups: [] };
 	const { analyze } = require('../nodes/Miravig/lib/core.js');
 	const masked = analyze('Contrat entre Alpha et Bravo.', {
@@ -51,24 +51,23 @@ console.log('--- id de repli par position (spec section 6/11) : même snapshot d
 
 console.log('--- Piège du snapshot désynchronisé : ordre différent = lookup incorrect ---');
 {
-	// Documente explicitement le piège du README : si l'ordre change entre
-	// les deux instances, les id de repli ne correspondent plus aux bons
-	// termes -- pas une erreur silencieuse détectable automatiquement (les
-	// deux termes existent, juste inversés), à surveiller côté utilisateur.
+	// Explicitly documents the README's trap: if the order changes between
+	// the two instances, the fallback ids no longer match the right terms
+	// -- not a silent error automatically detectable (both terms exist,
+	// just swapped), something for the user to watch out for.
 	const glossaryOrdreInverse = { terms: [{ term: 'Bravo' }, { term: 'Alpha' }] };
-	const masked = { outputText: '[TERME_G1] et [TERME_G2]' }; // "Alpha"=G1, "Bravo"=G2 au masquage
+	const masked = { outputText: '[TERME_G1] et [TERME_G2]' }; // "Alpha"=G1, "Bravo"=G2 when masking
 	const revealed = demasquerText(masked.outputText, glossaryOrdreInverse);
 	assert(revealed.text === 'Bravo et Alpha', "ordre inversé : G1/G2 résolus vers les MAUVAIS termes (Bravo/Alpha au lieu d'Alpha/Bravo) -- confirme le piège, pas un crash ni une détection automatique");
 }
 
 console.log('--- glossaryChecksum : garde-fou du piège ci-dessus, spec de cadrage du 12/08/2026 ---');
 {
-	// Reprend exactement le scénario "piège du snapshot désynchronisé"
-	// ci-dessus : deux glossaires logiquement DIFFÉRENTS (ordre inversé =
-	// id de repli différents) doivent produire des empreintes différentes
-	// -- c'est précisément ce que demasquerText seul ne détecte jamais
-	// (voir le test précédent, "confirme le piège, pas un crash ni une
-	// détection automatique").
+	// Reuses exactly the "desynchronized snapshot trap" scenario above: two
+	// logically DIFFERENT glossaries (reversed order = different fallback
+	// ids) must produce different checksums -- exactly what demasquerText
+	// alone never detects on its own (see the previous test, "confirms the
+	// trap, not a crash or automatic detection").
 	const glossaryMasquage = { terms: [{ term: 'Alpha' }, { term: 'Bravo' }] };
 	const glossaryOrdreInverse = { terms: [{ term: 'Bravo' }, { term: 'Alpha' }] };
 	assert(
@@ -82,8 +81,8 @@ console.log('--- glossaryChecksum : garde-fou du piège ci-dessus, spec de cadra
 	assert(glossaryChecksum(a) === glossaryChecksum(b), 'même glossaire logique (même id, même terme) => même empreinte');
 }
 {
-	// Formatage différent (groupes réordonnés) mais logiquement identique --
-	// ne doit pas déclencher une fausse alerte.
+	// Different formatting (groups reordered) but logically identical --
+	// must not trigger a false alarm.
 	const a = [{ term: 'Alpha', id: 1, groups: ['Général', 'Projet Alpha'] }];
 	const b = [{ term: 'Alpha', id: 1, groups: ['Projet Alpha', 'Général'] }];
 	assert(glossaryChecksum(a) === glossaryChecksum(b), 'ordre des groupes non significatif : même empreinte');
@@ -106,9 +105,9 @@ console.log('--- hasUnresolvedGlossaryPlaceholders : détecte un [TERME_G{N}] no
 
 console.log('--- Glossaire vide mais texte contenant un placeholder : compté comme échec, jamais masqué ---');
 {
-	// Piège explicitement visé par la spec ("jamais un résultat trompeur") :
-	// un glossaire vide ne doit PAS produire un faux "0 sur 0" quand le
-	// texte contient réellement un placeholder non résolvable.
+	// Trap explicitly targeted by the spec ("never a misleading result"):
+	// an empty glossary must NOT produce a false "0 out of 0" when the
+	// text genuinely contains an unresolvable placeholder.
 	const r = demasquerText('[TERME_G1] reste tel quel.', { terms: [] });
 	assert(r.total === 1 && r.resolved === 0, 'compté comme 1 échec sur 1, pas "rien à faire"');
 	assert(r.text === '[TERME_G1] reste tel quel.', 'texte inchangé (non résolu)');

@@ -1,14 +1,14 @@
 'use strict';
 
-// Vérification ECDSA de la variante "hachée" du garde-fou de licence
-// (lib/license-source.js), ajoutée suite à l'audit Semgrep du 21/08/2026
-// (voir SESSION_LOG.md) : Miravig.node.ts ne persiste plus la licence en
-// clair dans workflowStaticData (exporté avec le workflow), seulement un
-// sha256(licenseKey) recalculé à la volée depuis la credential à chaque
-// vérification -- jamais lu depuis le cache. Même couple de clés de TEST
-// que license.test.js, même style d'assertions, mêmes cas couverts pour la
-// variante hachée -- plus une preuve explicite que le record persisté ne
-// contient jamais la licence brute.
+// ECDSA verification of the "hashed" variant of the license guard
+// (lib/license-source.js), added following the Semgrep audit from
+// 21/08/2026 (see SESSION_LOG.md): Miravig.node.ts no longer persists the
+// plaintext license in workflowStaticData (exported with the workflow),
+// only a sha256(licenseKey) recomputed on the fly from the credential on
+// every check -- never read back from the cache. Same TEST key pair as
+// license.test.js, same assertion style, same cases covered for the
+// hashed variant -- plus an explicit proof that the persisted record
+// never contains the raw license.
 
 const crypto = require('crypto');
 const {
@@ -26,10 +26,10 @@ function assert(cond, label) {
 const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
 const testPublicJwk = publicKey.export({ format: 'jwk' });
 
-// Signature "raw" (r || s) comme les autres tests de cette suite -- voir
-// license.test.js pour le détail de pourquoi dsaEncoding: 'ieee-p1363' est
-// requis ici (Web Crypto, utilisé côté vérification, n'accepte pas le DER
-// produit par défaut par crypto.sign() de Node).
+// "Raw" signature (r || s) like the other tests in this suite -- see
+// license.test.js for the detail of why dsaEncoding: 'ieee-p1363' is
+// required here (Web Crypto, used on the verification side, doesn't
+// accept the DER produced by default by Node's crypto.sign()).
 function signRecord({ licenseKeyHash, status, checkedAt }) {
 	const payload = Buffer.from(buildLicenseSignaturePayloadHashed({ licenseKeyHash, status, checkedAt }));
 	const signature = crypto.sign('sha256', payload, { key: privateKey, dsaEncoding: 'ieee-p1363' });
@@ -39,10 +39,10 @@ function signRecord({ licenseKeyHash, status, checkedAt }) {
 (async () => {
 	console.log('--- sha256Hex : valeur de référence NIST fixe, pas seulement "ça tourne" ---');
 	{
-		// Vecteur de test standard (FIPS 180-4) -- si jamais sha256Hex()
-		// divergeait de crypto.subtle.digest('SHA-256', ...) côté Worker
-		// (account.worker.js) ou d'une future réécriture ici, ce test casse
-		// avant que ça ne devienne un bug de vérification silencieux.
+		// Standard test vector (FIPS 180-4) -- if sha256Hex() ever diverged
+		// from crypto.subtle.digest('SHA-256', ...) on the Worker side
+		// (account.worker.js) or from a future rewrite here, this test
+		// breaks before that turns into a silent verification bug.
 		assert(sha256Hex('abc') === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 'sha256("abc") correct');
 		assert(sha256Hex('') === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'sha256("") correct');
 	}
@@ -92,9 +92,10 @@ function signRecord({ licenseKeyHash, status, checkedAt }) {
 
 	console.log('--- Format `kh` distinct de `k` : un payload haché et un payload en clair ne peuvent jamais se confondre ---');
 	{
-		// buildLicenseSignaturePayloadHashed doit produire un JSON structurellement
-		// différent de buildLicenseSignaturePayload (clé `kh`, pas `k`) -- vérifié
-		// explicitement, pas seulement supposé par lecture du code.
+		// buildLicenseSignaturePayloadHashed must produce JSON that is
+		// structurally different from buildLicenseSignaturePayload (key
+		// `kh`, not `k`) -- verified explicitly, not just assumed by
+		// reading the code.
 		const payload = buildLicenseSignaturePayloadHashed({ licenseKeyHash: 'abc123', status: 'active', checkedAt: 1000 });
 		const parsed = JSON.parse(payload);
 		assert(Object.prototype.hasOwnProperty.call(parsed, 'kh'), 'le payload haché utilise bien le champ `kh`');
@@ -103,20 +104,21 @@ function signRecord({ licenseKeyHash, status, checkedAt }) {
 
 	console.log('--- Preuve directe : un record de cache construit comme Miravig.node.ts le fait ne contient jamais la licence brute ---');
 	{
-		// Reproduit exactement la forme de LicenseCacheRecord et de l'objet
-		// passé à verifyLicenseSignatureHashed() dans Miravig.node.ts#checkLicense
-		// (voir ce fichier) : {status, checkedAt, signatureHashed} persisté dans
-		// workflowStaticData, licenseKeyHash recalculé à la volée et jamais
-		// stocké. Le test échoue si un futur changement réintroduit la clé en
-		// clair dans le record persisté.
+		// Reproduces exactly the shape of LicenseCacheRecord and of the
+		// object passed to verifyLicenseSignatureHashed() in
+		// Miravig.node.ts#checkLicense (see that file): {status, checkedAt,
+		// signatureHashed} persisted in workflowStaticData, licenseKeyHash
+		// recomputed on the fly and never stored. This test fails if a
+		// future change reintroduces the plaintext key into the persisted
+		// record.
 		const realLicenseKey = 'LK-SUPER-SECRET-DO-NOT-LEAK-0123456789';
 		const licenseKeyHash = sha256Hex(realLicenseKey);
 		const status = 'active';
 		const checkedAt = Date.now();
 		const signed = signRecord({ licenseKeyHash, status, checkedAt });
 
-		// Ce qui serait effectivement écrit dans staticData[cacheKey] côté node
-		// (voir la construction de `record` dans checkLicense()) :
+		// What would actually be written to staticData[cacheKey] on the node
+		// side (see how `record` is built in checkLicense()):
 		const persistedRecord = {
 			status,
 			checkedAt,
@@ -129,17 +131,17 @@ function signRecord({ licenseKeyHash, status, checkedAt }) {
 		assert(!exportedWorkflowJson.includes(realLicenseKey), 'la licence brute n\'apparaît nulle part dans le JSON exporté');
 		assert(!exportedWorkflowJson.includes('licenseKey'), 'aucun champ nommé "licenseKey" dans le JSON exporté (l\'ancien format le contenait)');
 
-		// Et la vérification fonctionne toujours en recalculant le hash depuis
-		// la "vraie" clé (jamais lue depuis le cache) -- preuve que le
-		// mécanisme reste fonctionnellement équivalent à l'ancien format.
+		// And verification still works by recomputing the hash from the
+		// "real" key (never read from the cache) -- proof that the
+		// mechanism stays functionally equivalent to the old format.
 		const recomputedHash = sha256Hex(realLicenseKey);
 		const rebuiltForVerification = { licenseKeyHash: recomputedHash, ...persistedRecord };
 		assert((await verifySignatureWithKeyHashed(testPublicJwk, rebuiltForVerification)) === true, 'vérification réussit en recalculant le hash depuis la clé réelle');
 
-		// Et une clé DIFFÉRENTE de celle qui a été signée ne vérifie jamais --
-		// preuve que le hash recalculé protège bien contre un cache qui
-		// correspondrait à une autre licence (ex. credential changée entre deux
-		// exécutions sur le même node/workflow).
+		// And a key DIFFERENT from the one that was signed never verifies --
+		// proof that the recomputed hash correctly protects against a cache
+		// that would match a different license (e.g. the credential
+		// changed between two runs on the same node/workflow).
 		const wrongKeyHash = sha256Hex('LK-UNE-AUTRE-LICENCE');
 		const rebuiltWithWrongKey = { licenseKeyHash: wrongKeyHash, ...persistedRecord };
 		assert((await verifySignatureWithKeyHashed(testPublicJwk, rebuiltWithWrongKey)) === false, 'cache d\'une autre licence : rejeté même avec une signature par ailleurs valide');
