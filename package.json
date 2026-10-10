@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-miravig",
-  "version": "0.1.9",
-  "description": "Detects sensitive data before sending text to an LLM, and reverses masking afterwards -- checksum-verified glossary sync, never a silent correction. Prompt-quality checks (variables, placeholders, JSON wrapping, verbatim preservation) are a separate tool at n8n-checker.html, not part of this node.",
+  "version": "0.1.10",
+  "description": "Detects and masks sensitive data in your n8n workflows before an LLM call, then restores it after.",
   "keywords": [
     "n8n-community-node-package",
     "privacy",
@@ -11,7 +11,7 @@
     "gdpr"
   ],
   "license": "MIT",
-  "homepage": "https://miravig.com/mode-emploi-n8n.html",
+  "homepage": "https://www.miravig.com/mode-emploi-n8n.html",
   "author": {
     "name": "Miravig",
     "email": "contact@miravig.com"
