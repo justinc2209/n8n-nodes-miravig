@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-miravig",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Detects and masks sensitive data in your n8n workflows before an LLM call, then restores it after.",
   "keywords": [
     "n8n-community-node-package",

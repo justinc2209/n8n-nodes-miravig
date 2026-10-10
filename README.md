@@ -33,7 +33,7 @@ The node can also be used as a tool by an AI Agent.
 
 ## What it detects
 
-Emails, IBANs, bank cards, phone numbers, API keys and secrets, and national identification numbers for 24 countries — each validated with the official checksum algorithm where one exists (France, Spain, Portugal, Germany, Italy, Switzerland, Canada, Belgium, Austria, Sweden, Norway, Finland, Netherlands, Poland, Czechia/Slovakia, Croatia, Ireland, Iceland, Romania, Bulgaria, Slovenia, Lithuania, Estonia, and more). Your own `{{ $json.field }}` expressions are never touched.
+Emails, IBANs, bank cards, phone numbers, API keys and secrets, and national identification numbers. For 24 countries the official checksum is verified (France, Spain, Portugal, Germany, Italy, Switzerland, Australia, Canada, Belgium, Austria, Norway, Finland, Netherlands, Poland, Czechia, Slovakia, Croatia, Ireland, Iceland, Romania, Bulgaria, Slovenia, Lithuania, Estonia). Denmark, Latvia and the United States (SSN) have no reliable public checksum, so they are detected by format and context only. Your own `{{ $json.field }}` expressions are never touched.
 
 Native categories are replaced by one-way tokens such as `[EMAIL_HIDDEN]`.
 
@@ -66,7 +66,7 @@ Only the license key is checked online (about once every 15 minutes, cached). If
 
 ## Compatibility
 
-Tested on n8n 2.x, self-hosted. Requires Node.js 18+.
+Tested on n8n 2.x, self-hosted.
 
 ## Support
 
